@@ -69,10 +69,10 @@ class Indent {
   static const none = 0;
 
   /// The number of spaces in a block or collection body.
-  static const block = 2;
+  static const block = 4; // MK: was 2
 
   /// How much wrapped cascade sections indent.
-  static const cascade = 2;
+  static const cascade = 4; // MK: was 2
 
   /// The number of spaces in a single level of expression nesting.
   static const expression = 4;
