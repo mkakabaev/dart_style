@@ -38,7 +38,7 @@ mv my_dartfmt ~/bin   # any directory in PATH, I use my own ~/bin
 1. Install the [Custom Local Formatters](https://github.com/JKillian/vscode-custom-local-formatters) extension
 2. Add to VSCode's settings JSON (global, workspace, folder - at your choice):
 
-```json
+```jsonc
 "dart.enableSdkFormatter": false,
    
 "[dart]": {
