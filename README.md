@@ -1,3 +1,65 @@
+This is a fork of the [dart_style](https://github.com/dart-lang/dart_style) package that is slightly modified for my own needs. Current changes are:
+
+- 4 space indentation instead of 2 space one. 
+- Removed space between closing bracket and colon in the constructor:
+
+```dart
+class BN {
+    final int a;
+    final int b;
+    BN({
+        required int a,
+        required int b,
+    }): a = a,  // was }) : a = a ,
+        b = b;
+}
+```
+
+Inspired by [this](https://github.com/Bruhtek/custom-dartfmt) repository ideas.
+
+## Building own formatter
+
+1. Clone the original dart_style repository (or this one)
+2. Make necessary changes. 
+3. Compile the package.
+
+```sh
+dart compile exe bin/format.dart -o my_dartfmt
+```
+
+4. Move the executable tp the directory in PATH. I personally use my own ~/bin
+
+```sh
+mv my_dartfmt ~/bin   # any directory in PATH, I use my own ~/bin
+```
+
+## Enable the new formatter in VSCode
+
+1. Install the [Custom Local Formatters](https://github.com/JKillian/vscode-custom-local-formatters) extension
+2. Add to VSCode's settings JSON (global, workspace, folder - at your choice):
+
+```json
+"dart.enableSdkFormatter": false,
+   
+"[dart]": {
+    // ...
+    "editor.defaultFormatter": "jkillian.custom-local-formatters",
+    // ... 
+},
+
+"customLocalFormatters.formatters": [
+    {
+        "command": "my_dartfmt -l 200 ${file}",
+        "languages": ["dart"]
+    }
+],
+
+```
+
+Original README text below
+
+---
+
 The dart_style package defines an automatic, opinionated formatter for Dart
 code. It replaces the whitespace in your program with what it deems to be the
 best formatting for it. Resulting code should follow the [Dart style guide][]
