@@ -816,6 +816,8 @@ class SourceVisitor extends ThrowingAstVisitor {
       //       parameter,
       //     )   : field = value,
       //           super();
+      //
+      /*
       space();
       if (node.initializers.length > 1) {
         var padding = '  ';
@@ -831,6 +833,24 @@ class SourceVisitor extends ThrowingAstVisitor {
       space();
 
       builder.indent(6);
+      */
+
+      // MK:
+      {
+
+        // if (node.initializers.length > 1) {
+        //     var padding = '  ';
+        //     if (node.parameters.parameters.last.isNamed ||
+        //         node.parameters.parameters.last.isOptionalPositional) {
+        //       padding = ' ';
+        //     }
+        //     _writeText(padding, node.separator!);
+        // }
+        token(node.separator);
+        space();
+
+        builder.indent(4);
+      }
     } else {
       // Shift the itself ":" forward.
       builder.indent(Indent.constructorInitializer);
