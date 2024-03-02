@@ -1,7 +1,6 @@
 // Copyright (c) 2012, the Dart project authors.  Please see the AUTHORS file
 // for details. All rights reserved. Use of this source code is governed by a
 // BSD-style license that can be found in the LICENSE file.
-
 library pub.solver.backtracking_solver;
 
 import 'dart:async';
@@ -23,93 +22,111 @@ import 'version_queue.dart';
 import 'version_solver.dart';
 
 class HttpRequest extends $pb.GeneratedMessage {
-  static final $pb.BuilderInfo _i = $pb.BuilderInfo(
-      const $core.bool.fromEnvironment('protobuf.omit_message_names')
-          ? ''
-          : 'HttpRequest',
-      package: const $pb.PackageName(
+  static final $pb.BuilderInfo _i =
+      $pb.BuilderInfo(
           const $core.bool.fromEnvironment('protobuf.omit_message_names')
               ? ''
-              : 'google.logging.type'),
-      createEmptyInstance: create)
-    ..aOS(
-        1,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'requestMethod')
-    ..aOS(
-        2,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'requestUrl')
-    ..aInt64(
-        3,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'requestSize')
-    ..a<$core.int>(
-        4,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'status',
-        $pb.PbFieldType.O3)
-    ..aInt64(
-        5,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'responseSize')
-    ..aOS(
-        6,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'userAgent')
-    ..aOS(
-        7,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'remoteIp')
-    ..aOS(
-        8,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'referer')
-    ..aOB(
-        9,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'cacheHit')
-    ..aOB(
-        10,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'cacheValidatedWithOriginServer')
-    ..aOB(
-        11,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'cacheLookup')
-    ..aInt64(
-        12,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'cacheFillBytes')
-    ..aOS(
-        13,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'serverIp')
-    ..aOM<$0.Duration>(
-        14,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'latency',
-        subBuilder: $0.Duration.create)
-    ..aOS(
-        15,
-        const $core.bool.fromEnvironment('protobuf.omit_field_names')
-            ? ''
-            : 'protocol')
-    ..hasRequiredFields = false;
+              : 'HttpRequest',
+          package: const $pb.PackageName(
+            const $core.bool.fromEnvironment('protobuf.omit_message_names')
+                ? ''
+                : 'google.logging.type',
+          ),
+          createEmptyInstance: create,
+        )
+        ..aOS(
+          1,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'requestMethod',
+        )
+        ..aOS(
+          2,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'requestUrl',
+        )
+        ..aInt64(
+          3,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'requestSize',
+        )
+        ..a<$core.int>(
+          4,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'status',
+          $pb.PbFieldType.O3,
+        )
+        ..aInt64(
+          5,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'responseSize',
+        )
+        ..aOS(
+          6,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'userAgent',
+        )
+        ..aOS(
+          7,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'remoteIp',
+        )
+        ..aOS(
+          8,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'referer',
+        )
+        ..aOB(
+          9,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'cacheHit',
+        )
+        ..aOB(
+          10,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'cacheValidatedWithOriginServer',
+        )
+        ..aOB(
+          11,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'cacheLookup',
+        )
+        ..aInt64(
+          12,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'cacheFillBytes',
+        )
+        ..aOS(
+          13,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'serverIp',
+        )
+        ..aOM<$0.Duration>(
+          14,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'latency',
+          subBuilder: $0.Duration.create,
+        )
+        ..aOS(
+          15,
+          const $core.bool.fromEnvironment('protobuf.omit_field_names')
+              ? ''
+              : 'protocol',
+        )
+        ..hasRequiredFields = false;
 }
 
 /// The top-level solver.
@@ -166,11 +183,15 @@ class BacktrackingSolver {
   int get attemptedSolutions => _attemptedSolutions;
   var _attemptedSolutions = 1;
 
-  BacktrackingSolver(SolveType type, SourceRegistry sources, this.root,
-      this.lockFile, List<String> useLatest)
-      : type = type,
-        sources = sources,
-        cache = new PubspecCache(type, sources) {
+  BacktrackingSolver(
+    SolveType type,
+    SourceRegistry sources,
+    this.root,
+    this.lockFile,
+    List<String> useLatest,
+  ) : type = type,
+      sources = sources,
+      cache = new PubspecCache(type, sources) {
     // A fairly large switch statement.
     switch (region) {
       case Region.everywhere:
@@ -288,37 +309,38 @@ class BacktrackingSolver {
     }
 
     // A deeply nested statement that's hard on the formatter.
-    isTwoWay = !isEvent && bindings.isWhole && (isCustomTag ||
-        tag == 'input' && (name == 'value' || name =='checked') ||
-        tag == 'select' && (name == 'selectedindex' || name == 'value') ||
-        tag == 'textarea' && name == 'value');
+    isTwoWay =
+        !isEvent &&
+            bindings.isWhole &&
+            (isCustomTag ||
+                tag == 'input' && (name == 'value' || name == 'checked') ||
+                tag == 'select' &&
+                    (name == 'selectedindex' || name == 'value') ||
+                tag == 'textarea' && name == 'value');
 
-     // Even more deeply nested pathological example.
-     if (javaBooleanAnd(
+    // Even more deeply nested pathological example.
+    if (javaBooleanAnd(
+      javaBooleanAnd(
         javaBooleanAnd(
+          javaBooleanAnd(
             javaBooleanAnd(
+              javaBooleanAnd(
                 javaBooleanAnd(
-                    javaBooleanAnd(
-                        javaBooleanAnd(
-                            javaBooleanAnd(
-                                javaBooleanAnd(),
-                                _isEqualTokens(
-                                    node.period,
-                                    toNode.period)),
-                            _isEqualNodes(
-                                node.name,
-                                toNode.name)),
-                        _isEqualNodes(
-                            node.parameters,
-                            toNode.parameters)),
-                    _isEqualTokens(
-                        node.separator,
-                        toNode.separator)),
-                _isEqualNodeLists(node.initializers, toNode.initializers)),
-            _isEqualNodes(
-                node.redirectedConstructor,
-                toNode.redirectedConstructor)),
-        _isEqualNodes(node.body, toNode.body))) {
+                  javaBooleanAnd(),
+                  _isEqualTokens(node.period, toNode.period),
+                ),
+                _isEqualNodes(node.name, toNode.name),
+              ),
+              _isEqualNodes(node.parameters, toNode.parameters),
+            ),
+            _isEqualTokens(node.separator, toNode.separator),
+          ),
+          _isEqualNodeLists(node.initializers, toNode.initializers),
+        ),
+        _isEqualNodes(node.redirectedConstructor, toNode.redirectedConstructor),
+      ),
+      _isEqualNodes(node.body, toNode.body),
+    )) {
       toNode.element = node.element;
     }
   }
@@ -337,46 +359,52 @@ class BacktrackingSolver {
     overrides.sort((a, b) => a.name.compareTo(b.name));
 
     return newFuture(() {
-      stopwatch.start();
+          stopwatch.start();
 
-      // Pre-cache the root package's known pubspec.
-      cache.cache(new PackageId.root(root), root.pubspec);
+          // Pre-cache the root package's known pubspec.
+          cache.cache(new PackageId.root(root), root.pubspec);
 
-      _validateSdkConstraint(root.pubspec);
-      return _traverseSolution();
-    }).then((packages) {
-      var pubspecs = new Map.fromIterable(
-          packages,
-          key: (id) => id.name,
-          value: (id) => cache.getCachedPubspec(id));
+          _validateSdkConstraint(root.pubspec);
+          return _traverseSolution();
+        })
+        .then((packages) {
+          var pubspecs = new Map.fromIterable(
+            packages,
+            key: (id) => id.name,
+            value: (id) => cache.getCachedPubspec(id),
+          );
 
-      return new SolveResult.success(
-          sources,
-          root,
-          lockFile,
-          packages,
-          overrides,
-          pubspecs,
-          _getAvailableVersions(packages),
-          attemptedSolutions);
-    }).catchError((error) {
-      if (error is! SolveFailure) throw error;
+          return new SolveResult.success(
+            sources,
+            root,
+            lockFile,
+            packages,
+            overrides,
+            pubspecs,
+            _getAvailableVersions(packages),
+            attemptedSolutions,
+          );
+        })
+        .catchError((error) {
+          if (error is! SolveFailure) throw error;
 
-      // Wrap a failure in a result so we can attach some other data.
-      return new SolveResult.failure(
-          sources,
-          root,
-          lockFile,
-          overrides,
-          error,
-          attemptedSolutions);
-    }).whenComplete(() {
-      // Gather some solving metrics.
-      var buffer = new StringBuffer();
-      buffer.writeln('${runtimeType} took ${stopwatch.elapsed} seconds.');
-      buffer.writeln(cache.describeResults());
-      log.solver(buffer);
-    });
+          // Wrap a failure in a result so we can attach some other data.
+          return new SolveResult.failure(
+            sources,
+            root,
+            lockFile,
+            overrides,
+            error,
+            attemptedSolutions,
+          );
+        })
+        .whenComplete(() {
+          // Gather some solving metrics.
+          var buffer = new StringBuffer();
+          buffer.writeln('${runtimeType} took ${stopwatch.elapsed} seconds.');
+          buffer.writeln(cache.describeResults());
+          log.solver(buffer);
+        });
   }
 
   /// Generates a map containing all of the known available versions for each
@@ -709,46 +737,52 @@ class Traverser {
     }
     _visited.add(id);
 
-    return _solver.cache.getPubspec(id).then((pubspec) {
-      _validateSdkConstraint(pubspec);
+    return _solver.cache
+        .getPubspec(id)
+        .then((pubspec) {
+          _validateSdkConstraint(pubspec);
 
-      var deps = pubspec.dependencies.toSet();
+          var deps = pubspec.dependencies.toSet();
 
-      if (id.isRoot) {
-        // Include dev dependencies of the root package.
-        deps.addAll(pubspec.devDependencies);
+          if (id.isRoot) {
+            // Include dev dependencies of the root package.
+            deps.addAll(pubspec.devDependencies);
 
-        // Add all overrides. This ensures a dependency only present as an
-        // override is still included.
-        deps.addAll(_solver._overrides.values);
-      }
+            // Add all overrides. This ensures a dependency only present as an
+            // override is still included.
+            deps.addAll(_solver._overrides.values);
+          }
 
-      // Replace any overridden dependencies.
-      deps = deps.map((dep) {
-        var override = _solver._overrides[dep.name];
-        if (override != null) return override;
+          // Replace any overridden dependencies.
+          deps =
+              deps.map((dep) {
+                var override = _solver._overrides[dep.name];
+                if (override != null) return override;
 
-        // Not overridden.
-        return dep;
-      }).toSet();
+                // Not overridden.
+                return dep;
+              }).toSet();
 
-      // Make sure the package doesn't have any bad dependencies.
-      for (var dep in deps) {
-        if (!dep.isRoot && _solver.sources[dep.source] is UnknownSource) {
-          throw new UnknownSourceException(
-              id.name,
-              [new Dependency(id.name, id.version, dep)]);
-        }
-      }
+          // Make sure the package doesn't have any bad dependencies.
+          for (var dep in deps) {
+            if (!dep.isRoot && _solver.sources[dep.source] is UnknownSource) {
+              throw new UnknownSourceException(id.name, [new Dependency(
+                id.name,
+                id.version,
+                dep,
+              )]);
+            }
+          }
 
-      return _traverseDeps(id, new DependencyQueue(_solver, deps));
-    }).catchError((error) {
-      if (error is! PackageNotFoundException) throw error;
+          return _traverseDeps(id, new DependencyQueue(_solver, deps));
+        })
+        .catchError((error) {
+          if (error is! PackageNotFoundException) throw error;
 
-      // We can only get here if the lockfile refers to a specific package
-      // version that doesn't exist (probably because it was yanked).
-      throw new NoVersionException(id.name, null, id.version, []);
-    });
+          // We can only get here if the lockfile refers to a specific package
+          // version that doesn't exist (probably because it was yanked).
+          throw new NoVersionException(id.name, null, id.version, []);
+        });
   }
 
   /// Traverses the references that [depender] depends on, stored in [deps].
@@ -756,18 +790,27 @@ class Traverser {
   /// Destructively modifies [deps]. Completes to a list of packages if the
   /// traversal is complete. Completes it to an error if a failure occurred.
   /// Otherwise, recurses.
-  Future<List<PackageId>> _traverseDeps(PackageId depender,
-      DependencyQueue deps) {
+  Future<List<PackageId>> _traverseDeps(
+    PackageId depender,
+    DependencyQueue deps,
+  ) {
     // Move onto the next package if we've traversed all of these references.
     if (deps.isEmpty) return _traversePackage();
 
     return resetStack(() {
-      return deps.advance().then((dep) {
-        var dependency = new Dependency(depender.name, depender.version, dep);
-        return _registerDependency(dependency).then((_) {
-          if (dep.name == "barback") return _addImplicitDependencies();
-        });
-      }).then((_) => _traverseDeps(depender, deps));
+      return deps
+          .advance()
+          .then((dep) {
+            var dependency = new Dependency(
+              depender.name,
+              depender.version,
+              dep,
+            );
+            return _registerDependency(dependency).then((_) {
+              if (dep.name == "barback") return _addImplicitDependencies();
+            });
+          })
+          .then((_) => _traverseDeps(depender, deps));
     });
   }
 
@@ -785,8 +828,9 @@ class Traverser {
 
       // See if it's possible for a package to match that constraint.
       if (constraint.isEmpty) {
-        var constraints = dependencies.map(
-            (dep) => "  ${dep.dep.constraint} from ${dep.depender}").join('\n');
+        var constraints = dependencies
+            .map((dep) => "  ${dep.dep.constraint} from ${dep.depender}")
+            .join('\n');
         _solver.logSolve('disjoint constraints on ${dep.name}:\n$constraints');
         throw new DisjointConstraintException(dep.name, dependencies);
       }
@@ -813,40 +857,46 @@ class Traverser {
   /// it.
   Future<Iterable<PackageId>> _getAllowedVersions(PackageDep dep) {
     var constraint = _getConstraint(dep.name);
-    return _solver.cache.getVersions(dep.toRef()).then((versions) {
-      var allowed = versions.where((id) => constraint.allows(id.version));
+    return _solver.cache
+        .getVersions(dep.toRef())
+        .then((versions) {
+          var allowed = versions.where((id) => constraint.allows(id.version));
 
-      if (allowed.isEmpty) {
-        _solver.logSolve('no versions for ${dep.name} match $constraint');
-        throw new NoVersionException(
-            dep.name,
-            null,
-            constraint,
-            _getDependencies(dep.name));
-      }
+          if (allowed.isEmpty) {
+            _solver.logSolve('no versions for ${dep.name} match $constraint');
+            throw new NoVersionException(
+              dep.name,
+              null,
+              constraint,
+              _getDependencies(dep.name),
+            );
+          }
 
-      // If we're doing an upgrade on this package, only allow the latest
-      // version.
-      if (_solver._forceLatest.contains(dep.name)) allowed = [allowed.first];
+          // If we're doing an upgrade on this package, only allow the latest
+          // version.
+          if (_solver._forceLatest.contains(dep.name))
+            allowed = [allowed.first];
 
-      // Remove the locked version, if any, since that was already handled.
-      var locked = _getValidLocked(dep.name);
-      if (locked != null) {
-        allowed = allowed.where((dep) => dep.version != locked.version);
-      }
+          // Remove the locked version, if any, since that was already handled.
+          var locked = _getValidLocked(dep.name);
+          if (locked != null) {
+            allowed = allowed.where((dep) => dep.version != locked.version);
+          }
 
-      return allowed;
-    }).catchError((error, stackTrace) {
-      if (error is PackageNotFoundException) {
-        // Show the user why the package was being requested.
-        throw new DependencyNotFoundException(
-            dep.name,
-            error,
-            _getDependencies(dep.name));
-      }
+          return allowed;
+        })
+        .catchError((error, stackTrace) {
+          if (error is PackageNotFoundException) {
+            // Show the user why the package was being requested.
+            throw new DependencyNotFoundException(
+              dep.name,
+              error,
+              _getDependencies(dep.name),
+            );
+          }
 
-      throw error;
-    });
+          throw error;
+        });
   }
 
   /// Ensures that dependency [dep] from [depender] is consistent with the
@@ -864,7 +914,9 @@ class Traverser {
     // Make sure all of the existing sources match the new reference.
     if (required.dep.source != dep.source) {
       _solver.logSolve(
-          'source mismatch on ${dep.name}: ${required.dep.source} ' '!= ${dep.source}');
+        'source mismatch on ${dep.name}: ${required.dep.source} '
+        '!= ${dep.source}',
+      );
       throw new SourceMismatchException(dep.name, [required, dependency]);
     }
 
@@ -872,8 +924,9 @@ class Traverser {
     var source = _solver.sources[dep.source];
     if (!source.descriptionsEqual(dep.description, required.dep.description)) {
       _solver.logSolve(
-          'description mismatch on ${dep.name}: '
-              '${required.dep.description} != ${dep.description}');
+        'description mismatch on ${dep.name}: '
+        '${required.dep.description} != ${dep.description}',
+      );
       throw new DescriptionMismatchException(dep.name, [required, dependency]);
     }
   }
@@ -892,10 +945,11 @@ class Traverser {
     if (!dep.constraint.allows(selected.version)) {
       _solver.logSolve('selection $selected does not match $constraint');
       throw new NoVersionException(
-          dep.name,
-          selected.version,
-          constraint,
-          _getDependencies(dep.name));
+        dep.name,
+        selected.version,
+        constraint,
+        _getDependencies(dep.name),
+      );
     }
 
     return selected;
@@ -912,18 +966,24 @@ class Traverser {
     return Future.wait(barback.pubConstraints.keys.map((depName) {
       var constraint = barback.pubConstraints[depName];
       _solver.logSolve(
-          'add implicit $constraint pub dependency on ' '$depName');
+        'add implicit $constraint pub dependency on '
+        '$depName',
+      );
 
       var override = _solver._overrides[depName];
 
       // Use the same source and description as the dependency override if one
       // exists. This is mainly used by the pkgbuild tests, which use dependency
       // overrides for all repo packages.
-      var pubDep = override == null ?
-          new PackageDep(depName, "hosted", constraint, depName) :
-          override.withConstraint(constraint);
-      return _registerDependency(
-          new Dependency("pub itself", Version.none, pubDep));
+      var pubDep =
+          override == null
+              ? new PackageDep(depName, "hosted", constraint, depName)
+              : override.withConstraint(constraint);
+      return _registerDependency(new Dependency(
+        "pub itself",
+        Version.none,
+        pubDep,
+      ));
     }));
   }
 
@@ -948,16 +1008,16 @@ class Traverser {
   /// they all agree with each other.
   Dependency _getRequired(String name) {
     return _getDependencies(
-        name).firstWhere((dep) => !dep.dep.isRoot, orElse: () => null);
+      name,
+    ).firstWhere((dep) => !dep.dep.isRoot, orElse: () => null);
   }
 
   /// Gets the combined [VersionConstraint] currently being placed on package
   /// [name].
   VersionConstraint _getConstraint(String name) {
-    var constraint = _getDependencies(
-        name).map(
-            (dep) =>
-                dep.dep.constraint).fold(VersionConstraint.any, (a, b) => a.intersect(b));
+    var constraint = _getDependencies(name)
+        .map((dep) => dep.dep.constraint)
+        .fold(VersionConstraint.any, (a, b) => a.intersect(b));
 
     return constraint;
   }
@@ -985,8 +1045,10 @@ class Traverser {
 
       var source = _solver.sources[package.source];
       if (!source.descriptionsEqual(
-          package.description,
-          required.dep.description)) return null;
+        package.description,
+        required.dep.description,
+      ))
+        return null;
     }
 
     return package;
@@ -994,8 +1056,11 @@ class Traverser {
 
   /// Run the dart2js compiler.
   Future _doCompilation(Transform transform) {
-    var provider = new _BarbackCompilerProvider(_environment, transform,
-        generateSourceMaps: _generateSourceMaps);
+    var provider = new _BarbackCompilerProvider(
+      _environment,
+      transform,
+      generateSourceMaps: _generateSourceMaps,
+    );
 
     // Create a "path" to the entrypoint script. The entrypoint may not actually
     // be on disk, but this gives dart2js a root to resolve relative paths
@@ -1009,22 +1074,28 @@ class Traverser {
     // make sure paths in errors are mapped to the original source path so they
     // can understand them.
     return dart.compile(
-        entrypoint, provider,
-        commandLineOptions: _configCommandLineOptions,
-        csp: _configBool('csp'),
-        checked: _configBool('checked'),
-        minify: _configBool(
-            'minify', defaultsTo: _settings.mode == BarbackMode.RELEASE),
-        verbose: _configBool('verbose'),
-        environment: _configEnvironment,
-        packageRoot: _environment.rootPackage.path("packages"),
-        analyzeAll: _configBool('analyzeAll'),
-        suppressWarnings: _configBool('suppressWarnings'),
-        suppressHints: _configBool('suppressHints'),
-        suppressPackageWarnings: _configBool(
-            'suppressPackageWarnings', defaultsTo: true),
-        terse: _configBool('terse'),
-        includeSourceMapUrls: _settings.mode != BarbackMode.RELEASE);
+      entrypoint,
+      provider,
+      commandLineOptions: _configCommandLineOptions,
+      csp: _configBool('csp'),
+      checked: _configBool('checked'),
+      minify: _configBool(
+        'minify',
+        defaultsTo: _settings.mode == BarbackMode.RELEASE,
+      ),
+      verbose: _configBool('verbose'),
+      environment: _configEnvironment,
+      packageRoot: _environment.rootPackage.path("packages"),
+      analyzeAll: _configBool('analyzeAll'),
+      suppressWarnings: _configBool('suppressWarnings'),
+      suppressHints: _configBool('suppressHints'),
+      suppressPackageWarnings: _configBool(
+        'suppressPackageWarnings',
+        defaultsTo: true,
+      ),
+      terse: _configBool('terse'),
+      includeSourceMapUrls: _settings.mode != BarbackMode.RELEASE,
+    );
   }
 }
 
@@ -1036,7 +1107,9 @@ void _validateSdkConstraint(Pubspec pubspec) {
   if (pubspec.environment.sdkVersion.allows(sdk.version)) return;
 
   throw new BadSdkVersionException(
-      pubspec.name,
-      'Package ${pubspec.name} requires SDK version '
-          '${pubspec.environment.sdkVersion} but the current SDK is ' '${sdk.version}.');
+    pubspec.name,
+    'Package ${pubspec.name} requires SDK version '
+    '${pubspec.environment.sdkVersion} but the current SDK is '
+    '${sdk.version}.',
+  );
 }

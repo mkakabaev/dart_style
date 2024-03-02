@@ -67,8 +67,10 @@ declaration/  - Typedef, class, enum, extension, mixin, and member declarations.
                 Includes constructors, getters, setters, methods, and fields,
                 but not functions and variables, which are in their own
                 directories below.
-expression/   - Expressions.
+expression/   - Expressions and collection elements.
+function/     - Function declarations.
 invocation/   - Function and member invocations.
+pattern/      - Patterns.
 selection/    - Test preserving selection information.
 statement/    - Statements.
 top_level/    - Top-level directives.

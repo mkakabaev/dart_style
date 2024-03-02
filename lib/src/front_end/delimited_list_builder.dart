@@ -25,11 +25,11 @@ class DelimitedListBuilder {
   Piece? _leftBracket;
 
   /// The list of elements in the list.
-  final List<ListElement> _elements = [];
+  final List<ListElementPiece> _elements = [];
 
   /// The element that should have a blank line preserved between them and the
   /// next piece.
-  final Set<ListElement> _blanksAfter = {};
+  final Set<ListElementPiece> _blanksAfter = {};
 
   /// The closing bracket after the elements, if any.
   Piece? _rightBracket;
@@ -51,35 +51,33 @@ class DelimitedListBuilder {
 
   /// Creates the final [ListPiece] out of the added brackets, delimiters,
   /// elements, and style.
-  ListPiece build() {
-    var blockElement = -1;
-    if (_style.allowBlockElement) blockElement = _findBlockElement();
+  Piece build() {
+    // To simplify the piece tree, if there are no elements, just return the
+    // brackets concatenated together. We don't have to worry about comments
+    // here since they would be in the [_elements] list if there were any.
+    if (_elements.isEmpty) {
+      return _visitor.buildPiece((b) {
+        if (_leftBracket case var bracket?) b.add(bracket);
+        if (_rightBracket case var bracket?) b.add(bracket);
+      });
+    }
 
-    return ListPiece(_leftBracket, _elements, _blanksAfter, _rightBracket,
-        _style, blockElement,
-        mustSplit: _mustSplit);
+    if (_style.allowBlockElement) _setBlockElementFormatting();
+
+    var piece =
+        ListPiece(_leftBracket, _elements, _blanksAfter, _rightBracket, _style);
+    if (_mustSplit) piece.pin(State.split);
+    return piece;
   }
 
   /// Adds the opening [bracket] to the built list.
-  ///
-  /// If [delimiter] is given, it is a second bracket occurring immediately
-  /// after [bracket]. This is used for parameter lists where all parameters
-  /// are optional or named, as in:
-  ///
-  /// ```
-  /// function([parameter]);
-  /// ```
-  ///
-  /// Here, [bracket] will be `(` and [delimiter] will be `[`.
-  void leftBracket(Token bracket, {Piece? preceding, Token? delimiter}) {
-    _leftBracket = _visitor.buildPiece((b) {
-      if (preceding != null) {
-        b.add(preceding);
-        b.space();
-      }
-      b.token(bracket);
-      b.token(delimiter);
-    });
+  void leftBracket(Token bracket) {
+    addLeftBracket(_visitor.tokenPiece(bracket));
+  }
+
+  /// Adds the opening bracket [piece] to the built list.
+  void addLeftBracket(Piece piece) {
+    _leftBracket = piece;
   }
 
   /// Adds the closing [bracket] to the built list along with any comments that
@@ -89,9 +87,7 @@ class DelimitedListBuilder {
   /// after [bracket]. This is used for parameter lists with optional or named
   /// parameters, like:
   ///
-  /// ```
-  /// function(mandatory, {named});
-  /// ```
+  ///     function(mandatory, {named});
   ///
   /// Here, [bracket] will be `)` and [delimiter] will be `}`.
   ///
@@ -106,13 +102,11 @@ class DelimitedListBuilder {
     // bracket. If there is a delimiter, this will move comments between it and
     // the bracket to before the delimiter, as in:
     //
-    // ```
-    // // Before:
-    // f([parameter] /* comment */) {}
+    //     // Before:
+    //     f([parameter] /* comment */) {}
     //
-    // // After:
-    // f([parameter /* comment */]) {}
-    // ```
+    //     // After:
+    //     f([parameter /* comment */]) {}
     if (delimiter != null) {
       commentsBefore = _visitor.comments
           .takeCommentsBefore(delimiter)
@@ -141,7 +135,7 @@ class DelimitedListBuilder {
   ///
   /// Assumes there is no comma after this piece.
   void add(Piece piece, [BlockFormat format = BlockFormat.none]) {
-    _elements.add(ListElement(_leadingComments, piece, format));
+    _elements.add(ListElementPiece(_leadingComments, piece, format));
     _leadingComments.clear();
     _commentsBeforeComma = CommentSequence.empty;
   }
@@ -160,8 +154,11 @@ class DelimitedListBuilder {
 
     // See if it's an expression that supports block formatting.
     var format = switch (element) {
-      FunctionExpression() when element.canBlockSplit => BlockFormat.function,
-      Expression() when element.canBlockSplit => BlockFormat.block,
+      AdjacentStrings(indentStrings: true) =>
+        BlockFormat.indentedAdjacentStrings,
+      AdjacentStrings() => BlockFormat.unindentedAdjacentStrings,
+      Expression() => element.blockFormatType,
+      DartPattern() when element.canBlockSplit => BlockFormat.collection,
       _ => BlockFormat.none,
     };
 
@@ -187,15 +184,11 @@ class DelimitedListBuilder {
     // Preserve any comments before the delimiter. Treat them as occurring
     // before the previous element's comma. This means that:
     //
-    // ```
-    // function(p1, /* comment */ [p1]);
-    // ```
+    //     function(p1, /* comment */ [p1]);
     //
     // Will be formatted as:
     //
-    // ```
-    // function(p1 /* comment */, [p1]);
-    // ```
+    //     function(p1 /* comment */, [p1]);
     //
     // (In practice, it's such an unusual place for a comment that it doesn't
     // matter that much where it goes and this seems to be simple and
@@ -254,7 +247,7 @@ class DelimitedListBuilder {
       }
 
       var commentPiece = _visitor.pieces.writeComment(comment);
-      _elements.add(ListElement.comment(commentPiece));
+      _elements.add(ListElementPiece.comment(commentPiece));
     }
 
     // Leading comments are written before the next element.
@@ -279,13 +272,11 @@ class DelimitedListBuilder {
   ///
   /// For example:
   ///
-  /// ```
-  /// function(
-  ///   argument /* inline */, // hanging
-  ///   // separate
-  ///   /* leading */ nextArgument
-  /// );
-  /// ```
+  ///     function(
+  ///       argument /* inline */, // hanging
+  ///       // separate
+  ///       /* leading */ nextArgument
+  ///     );
   ///
   /// Calculating these takes into account whether there are newlines before or
   /// after the comments, and which side of the commas the comments appear on.
@@ -321,12 +312,10 @@ class DelimitedListBuilder {
     // Inline block comments before the `,` stay with the preceding element, as
     // in:
     //
-    // ```
-    // function(
-    //   argument /* hanging */ /* comment */,
-    //   argument,
-    // );
-    // ```
+    //     function(
+    //       argument /* hanging */ /* comment */,
+    //       argument,
+    //     );
     var inlineCommentCount = 0;
     if (_elements.isNotEmpty) {
       while (inlineCommentCount < _commentsBeforeComma.length) {
@@ -360,12 +349,10 @@ class DelimitedListBuilder {
     // Inline block comments on the same line as the next element lead at the
     // beginning of that line, as in:
     ///
-    // ```
-    // function(
-    //   argument,
-    //   /* leading */ /* comment */ argument,
-    // );
-    // ```
+    //     function(
+    //       argument,
+    //       /* leading */ /* comment */ argument,
+    //     );
     var leadingCommentCount = 0;
     if (hasElementAfter && commentsBeforeElement.isNotEmpty) {
       while (leadingCommentCount < commentsBeforeElement.length) {
@@ -385,14 +372,12 @@ class DelimitedListBuilder {
     // Comments that are neither hanging nor leading are formatted like
     // separate elements, as in:
     //
-    // ```
-    // function(
-    //   argument,
-    //   /* comment */
-    //   argument,
-    //   // another
-    // );
-    // ```
+    //     function(
+    //       argument,
+    //       /* comment */
+    //       argument,
+    //       // another
+    //     );
     var separateComments =
         separateCommentsBeforeComma.concatenate(separateCommentsAfterComma);
 
@@ -404,46 +389,106 @@ class DelimitedListBuilder {
     );
   }
 
-  /// If [_blockCandidates] contains a single expression that can receive
-  /// block formatting, then returns its index. Otherwise returns `-1`.
-  int _findBlockElement() {
+  /// Looks at the [BlockFormat] types of all of the elements to determine if
+  /// one of them should be block formatted.
+  ///
+  /// Also, if an argument list has an adjacent strings expression followed by a
+  /// block formattable function expression, we allow the adjacent strings to
+  /// split without forcing the list to split so that it can continue to have
+  /// block formatting. This is pretty special-cased, but it makes calls to
+  /// `test()` and `group()` look better and those are so common that it's
+  /// worth massaging them some. It allows:
+  ///
+  ///     test('some long description'
+  ///         'split across multiple lines', () {
+  ///       expect(1, 1);
+  ///     });
+  ///
+  /// Without this special rule, the newline in the adjacent strings would
+  /// prevent block formatting and lead to the entire test body to be indented:
+  ///
+  ///     test(
+  ///       'some long description'
+  ///       'split across multiple lines',
+  ///       () {
+  ///         expect(1, 1);
+  ///       },
+  ///     );
+  ///
+  /// Stores the result of this calculation by setting flags on the
+  /// [ListElement]s.
+  void _setBlockElementFormatting() {
     // TODO(tall): These heuristics will probably need some iteration.
     var functions = <int>[];
-    var others = <int>[];
+    var collections = <int>[];
+    var invocations = <int>[];
+    var adjacentStrings = <int>[];
 
     for (var i = 0; i < _elements.length; i++) {
       switch (_elements[i].blockFormat) {
         case BlockFormat.function:
           functions.add(i);
-        case BlockFormat.block:
-          others.add(i);
+        case BlockFormat.collection:
+          collections.add(i);
+        case BlockFormat.invocation:
+          invocations.add(i);
+        case BlockFormat.indentedAdjacentStrings:
+        case BlockFormat.unindentedAdjacentStrings:
+          adjacentStrings.add(i);
         case BlockFormat.none:
           break; // Not a block element.
       }
     }
 
-    // A function expression takes precedence over other block arguments.
-    if (functions.length == 1) return functions.first;
+    switch ((functions, collections, invocations, adjacentStrings)) {
+      // Only allow block formatting in an argument list containing adjacent
+      // strings when:
+      //
+      // 1. The block argument is a function expression.
+      // 2. It is the second argument, following an adjacent strings expression.
+      // 3. There are no other adjacent strings in the argument list.
+      //
+      // This matches the `test()` and `group()` and other similar APIs where
+      // you have a message string followed by a block-like function expression
+      // but little else.
+      // TODO(tall): We may want to iterate on these heuristics. For now,
+      // starting with something very narrowly targeted.
+      case ([1], _, _, [0]):
+        // The adjacent strings.
+        _elements[0].allowNewlinesWhenUnsplit = true;
+        if (_elements[0].blockFormat == BlockFormat.unindentedAdjacentStrings) {
+          _elements[0].indentWhenBlockFormatted = true;
+        }
 
-    // Otherwise, if there is single block argument, it can be block formatted.
-    if (functions.isEmpty && others.length == 1) return others.first;
+        // The block-formattable function.
+        _elements[1].allowNewlinesWhenUnsplit = true;
 
-    // There are no block arguments, or it's ambiguous as to which one should
-    // be it.
+      // A function expression takes precedence over other block arguments.
+      case ([var blockArgument], _, _, _):
+
+      // A single collection literal can be block formatted even if there are
+      // other arguments.
+      case ([], [var blockArgument], _, _):
+
+      // A single invocation can be block formatted only when there are no
+      // other arguments.
+      case ([], [], [var blockArgument], _) when _elements.length == 1:
+        _elements[blockArgument].allowNewlinesWhenUnsplit = true;
+    }
+
+    // If we get here, there are no block arguments, or it's ambiguous as to
+    // which one should be it so none are.
     // TODO(tall): The old formatter allows multiple block arguments, like:
     //
-    // ```
-    // function(() {
-    //   body;
-    // }, () {
-    //   more;
-    // });
-    // ```
+    //     function(() {
+    //       body;
+    //     }, () {
+    //       more;
+    //     });
     //
     // This doesn't seem very common in the Flutter repo, but does occur
     // sometimes. We'll probably want to experiment to see if it's worth
     // supporting multiple block arguments. If so, we should at least require
     // them to be contiguous with no non-block arguments in the middle.
-    return -1;
   }
 }

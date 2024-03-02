@@ -24,6 +24,12 @@ function([1, 2], () { body; }, {3, 4});
 function([1, 2], () {
   body;
 }, {3, 4});
+>>> Immediately invoked function takes precedence over other kinds of block arguments.
+function([1, 2], () { body; }(), {3, 4});
+<<<
+function([1, 2], () {
+  body;
+}(), {3, 4});
 >>> Multiple collections prevent block formatting.
 function([element, element], {key: value});
 <<<
@@ -38,19 +44,95 @@ function([], [
   element,
   element,
 ], <String>{});
->>> Multiple calls prevent block formatting.
-function(inner(argument), new SomeClass(argument));
+>>> Can't block format a function call with any preceding arguments.
+function(arg, innerFunction(veryLongArgumentExpression));
 <<<
 function(
-  inner(argument),
-  new SomeClass(argument),
+  arg,
+  innerFunction(
+    veryLongArgumentExpression,
+  ),
 );
->>> Empty and non-empty calls.
-function(a(), inner(argument), const C());
+>>> Can't block format a function call with any subsequent arguments.
+function(innerFunction(veryLongArgumentExpression), arg);
 <<<
-function(a(), inner(
-  argument,
-), const C());
+function(
+  innerFunction(
+    veryLongArgumentExpression,
+  ),
+  arg,
+);
+>>> Can't block format a method call with any preceding arguments.
+function(arg, target.inner(veryLongArgumentExpression));
+<<<
+function(
+  arg,
+  target.inner(
+    veryLongArgumentExpression,
+  ),
+);
+>>> Can't block format a method call with any subsequent arguments.
+function(target.inner(veryLongArgumentExpression), arg);
+<<<
+function(
+  target.inner(
+    veryLongArgumentExpression,
+  ),
+  arg,
+);
+>>> Can't block format an instance creation with any preceding arguments.
+function(arg, new SomeClass(veryLongArgumentExpression));
+<<<
+function(
+  arg,
+  new SomeClass(
+    veryLongArgumentExpression,
+  ),
+);
+>>> Can't block format an instance creation with any subsequent arguments.
+function(new SomeClass(veryLongArgumentExpression), arg);
+<<<
+function(
+  new SomeClass(
+    veryLongArgumentExpression,
+  ),
+  arg,
+);
+>>> List literal with other non-block arguments.
+function(before, [veryLongElement, anotherLongElement], after);
+<<<
+function(before, [
+  veryLongElement,
+  anotherLongElement,
+], after);
+>>> Map literal with other non-block arguments.
+function(before, {1: veryLongElement, 2: anotherLongElement}, after);
+<<<
+function(before, {
+  1: veryLongElement,
+  2: anotherLongElement,
+}, after);
+>>> Set literal with other non-block arguments.
+function(before, {veryLongElement, anotherLongElement}, after);
+<<<
+function(before, {
+  veryLongElement,
+  anotherLongElement,
+}, after);
+>>> Record literal with other non-block arguments.
+function(before, (veryLongElement, anotherLongElement), after);
+<<<
+function(before, (
+  veryLongElement,
+  anotherLongElement,
+), after);
+>>> Switch expression with other non-block arguments.
+function(before, switch (n) {1 => veryLongElement, 2 => anotherLongElement}, after);
+<<<
+function(before, switch (n) {
+  1 => veryLongElement,
+  2 => anotherLongElement,
+}, after);
 >>> Multiple switches prevent block formatting.
 function(switch (a) { 1 => 2 }, switch (b) { 1 => 2 });
 <<<
@@ -64,3 +146,79 @@ function(switch (a) {}, switch (b) { 1 => 2 }, switch (c) {});
 function(switch (a) {}, switch (b) {
   1 => 2,
 }, switch (c) {});
+>>> Collection and multi-line string prevents block formatting.
+function([element, element], '''multiple
+lines''');
+<<<
+function(
+  [element, element],
+  '''multiple
+lines''',
+);
+>>> Adjacent strings preceding a function expression doesn't prevent block formatting.
+test('First adjacent string' 'second adjacent string'
+'third adjacent string', () async {
+  ;
+});
+<<<
+test('First adjacent string'
+    'second adjacent string'
+    'third adjacent string', () async {
+  ;
+});
+>>> Don't block format a function with a preceding adjacent string if it doesn't fit.
+test('First adjacent string' 'second long adjacent string', () async {
+  ;
+});
+<<<
+test(
+  'First adjacent string'
+  'second long adjacent string',
+  () async {
+    ;
+  },
+);
+>>> Don't block format adjacent strings preceding a non-function block argument.
+test('First adjacent string'
+    'second adjacent string'
+    'third adjacent string', [
+  element1,
+  element2,
+  element3,
+  element4,
+]);
+<<<
+test(
+  'First adjacent string'
+  'second adjacent string'
+  'third adjacent string',
+  [
+    element1,
+    element2,
+    element3,
+    element4,
+  ],
+);
+>>> Other string arguments don't prevent block formatting.
+test('First string line 1' 'first string line 2', () {
+  ;
+}, 'Another simple string');
+<<<
+test('First string line 1'
+    'first string line 2', () {
+  ;
+}, 'Another simple string');
+>>> Other adjacent string arguments prevent block formatting.
+test('First string line 1' 'first string line 2', () {
+  ;
+}, 'Another adjacent' 'string argument');
+<<<
+test(
+  'First string line 1'
+      'first string line 2',
+  () {
+    ;
+  },
+  'Another adjacent'
+      'string argument',
+);

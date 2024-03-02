@@ -6,16 +6,18 @@ import 'package:analyzer/dart/ast/token.dart';
 
 import '../ast_extensions.dart';
 import '../piece/assign.dart';
-import '../piece/block.dart';
 import '../piece/clause.dart';
+import '../piece/for.dart';
 import '../piece/function.dart';
-import '../piece/if.dart';
+import '../piece/if_case.dart';
 import '../piece/infix.dart';
 import '../piece/list.dart';
 import '../piece/piece.dart';
 import '../piece/postfix.dart';
+import '../piece/sequence.dart';
 import '../piece/try.dart';
 import '../piece/type.dart';
+import '../piece/variable.dart';
 import 'adjacent_builder.dart';
 import 'ast_node_visitor.dart';
 import 'comment_writer.dart';
@@ -54,6 +56,8 @@ mixin PieceFactory {
 
   Piece nodePiece(AstNode node, {bool commaAfter = false});
 
+  Piece? optionalNodePiece(AstNode? node);
+
   /// Creates a [ListPiece] for an argument list.
   Piece createArgumentList(
       Token leftBracket, Iterable<AstNode> elements, Token rightBracket) {
@@ -64,23 +68,21 @@ mixin PieceFactory {
         style: const ListStyle(allowBlockElement: true));
   }
 
-  /// Creates a [BlockPiece] for a given bracket-delimited block or declaration
-  /// body.
+  /// Creates a [SequencePiece] for a given bracket-delimited block or
+  /// declaration body.
   ///
   /// If [forceSplit] is `true`, then the block will split even if empty. This
   /// is used, for example, with empty blocks in `if` statements followed by
   /// `else` clauses:
   ///
-  /// ```
-  /// if (condition) {
-  /// } else {}
-  /// ```
+  ///     if (condition) {
+  ///     } else {}
   Piece createBody(
       Token leftBracket, List<AstNode> contents, Token rightBracket,
       {bool forceSplit = false}) {
-    var leftBracketPiece = tokenPiece(leftBracket);
-
     var sequence = SequenceBuilder(this);
+    sequence.leftBracket(leftBracket);
+
     for (var node in contents) {
       sequence.visit(node);
 
@@ -89,25 +91,18 @@ mixin PieceFactory {
       if (node.hasNonEmptyBody) sequence.addBlank();
     }
 
-    // Place any comments before the "}" inside the block.
-    sequence.addCommentsBefore(rightBracket);
-
-    var rightBracketPiece = tokenPiece(rightBracket);
-
-    return BlockPiece(leftBracketPiece, sequence.build(), rightBracketPiece,
-        alwaysSplit: forceSplit || contents.isNotEmpty || sequence.mustSplit);
+    sequence.rightBracket(rightBracket);
+    return sequence.build(forceSplit: forceSplit);
   }
 
-  /// Creates a [BlockPiece] for a given [Block].
+  /// Creates a [SequencePiece] for a given [Block].
   ///
   /// If [forceSplit] is `true`, then the block will split even if empty. This
   /// is used, for example, with empty blocks in `if` statements followed by
   /// `else` clauses:
   ///
-  /// ```
-  /// if (condition) {
-  /// } else {}
-  /// ```
+  ///     if (condition) {
+  ///     } else {}
   Piece createBlock(Block block, {bool forceSplit = false}) {
     return createBody(block.leftBracket, block.statements, block.rightBracket,
         forceSplit: forceSplit);
@@ -122,10 +117,15 @@ mixin PieceFactory {
     });
   }
 
-  /// Creates a [ListPiece] for a collection literal.
-  Piece createCollection(Token? constKeyword, Token leftBracket,
-      List<AstNode> elements, Token rightBracket,
-      {TypeArgumentList? typeArguments, ListStyle style = const ListStyle()}) {
+  /// Creates a [ListPiece] for a collection literal or pattern.
+  Piece createCollection(
+    Token leftBracket,
+    List<AstNode> elements,
+    Token rightBracket, {
+    Token? constKeyword,
+    TypeArgumentList? typeArguments,
+    ListStyle style = const ListStyle(),
+  }) {
     return buildPiece((b) {
       b.modifier(constKeyword);
       b.visit(typeArguments);
@@ -133,12 +133,10 @@ mixin PieceFactory {
       // TODO(tall): Support a line comment inside a collection literal as a
       // signal to preserve internal newlines. So if you have:
       //
-      // ```
-      // var list = [
-      //   1, 2, 3, // comment
-      //   4, 5, 6,
-      // ];
-      // ```
+      //     var list = [
+      //       1, 2, 3, // comment
+      //       4, 5, 6,
+      //     ];
       //
       // The formatter will preserve the newline after element 3 and the lack of
       // them after the other elements.
@@ -166,14 +164,6 @@ mixin PieceFactory {
     });
   }
 
-  /// Creates metadata annotations for a directive.
-  ///
-  /// Always forces the annotations to be on a previous line.
-  void createDirectiveMetadata(Directive directive) {
-    // TODO(tall): Implement. See SourceVisitor._visitDirectiveMetadata().
-    if (directive.metadata.isNotEmpty) throw UnimplementedError();
-  }
-
   /// Creates a dotted or qualified identifier.
   Piece createDotted(NodeList<SimpleIdentifier> components) {
     return buildPiece((b) {
@@ -199,6 +189,7 @@ mixin PieceFactory {
       bool isLastConstant = false,
       Token? semicolon}) {
     return buildPiece((b) {
+      b.metadata(node.metadata);
       b.token(node.name);
       if (node.arguments case var arguments?) {
         b.visit(arguments.typeArguments);
@@ -219,6 +210,209 @@ mixin PieceFactory {
     });
   }
 
+  /// Creates a piece for a for statement or element.
+  Piece createFor(
+      {required Token? awaitKeyword,
+      required Token forKeyword,
+      required Token leftParenthesis,
+      required ForLoopParts forLoopParts,
+      required Token rightParenthesis,
+      required AstNode body,
+      required bool hasBlockBody,
+      bool forceSplitBody = false}) {
+    var forKeywordPiece = buildPiece((b) {
+      b.modifier(awaitKeyword);
+      b.token(forKeyword);
+    });
+
+    Piece forPartsPiece;
+    switch (forLoopParts) {
+      // Edge case: A totally empty for loop is formatted just as `(;;)` with
+      // no splits or spaces anywhere.
+      case ForPartsWithExpression(
+            initialization: null,
+            leftSeparator: Token(precedingComments: null),
+            condition: null,
+            rightSeparator: Token(precedingComments: null),
+            updaters: NodeList(isEmpty: true),
+          )
+          when rightParenthesis.precedingComments == null:
+        forPartsPiece = buildPiece((b) {
+          b.token(leftParenthesis);
+          b.token(forLoopParts.leftSeparator);
+          b.token(forLoopParts.rightSeparator);
+          b.token(rightParenthesis);
+        });
+
+      case ForParts forParts &&
+            ForPartsWithDeclarations(variables: AstNode? initializer):
+      case ForParts forParts &&
+            ForPartsWithExpression(initialization: AstNode? initializer):
+      case ForParts forParts &&
+            ForPartsWithPattern(variables: AstNode? initializer):
+        // In a C-style for loop, treat the for loop parts like an argument list
+        // where each clause is a separate argument. This means that when they
+        // split, they split like:
+        //
+        //     for (
+        //       initializerClause;
+        //       conditionClause;
+        //       incrementClause
+        //     ) {
+        //       body;
+        //     }
+        var partsList =
+            DelimitedListBuilder(this, const ListStyle(commas: Commas.none));
+        partsList.leftBracket(leftParenthesis);
+
+        // The initializer clause.
+        if (initializer != null) {
+          partsList.addCommentsBefore(initializer.beginToken);
+          partsList.add(buildPiece((b) {
+            b.visit(initializer);
+            b.token(forParts.leftSeparator);
+          }));
+        } else {
+          // No initializer, so look at the comments before `;`.
+          partsList.addCommentsBefore(forParts.leftSeparator);
+          partsList.add(tokenPiece(forParts.leftSeparator));
+        }
+
+        // The condition clause.
+        if (forParts.condition case var conditionExpression?) {
+          partsList.addCommentsBefore(conditionExpression.beginToken);
+          partsList.add(buildPiece((b) {
+            b.visit(conditionExpression);
+            b.token(forParts.rightSeparator);
+          }));
+        } else {
+          partsList.addCommentsBefore(forParts.rightSeparator);
+          partsList.add(tokenPiece(forParts.rightSeparator));
+        }
+
+        // The update clauses.
+        if (forParts.updaters.isNotEmpty) {
+          partsList.addCommentsBefore(forParts.updaters.first.beginToken);
+          partsList.add(createList(forParts.updaters,
+              style: const ListStyle(commas: Commas.nonTrailing)));
+        }
+
+        partsList.rightBracket(rightParenthesis);
+        forPartsPiece = partsList.build();
+
+      case ForEachParts forEachParts &&
+            ForEachPartsWithDeclaration(loopVariable: AstNode variable):
+      case ForEachParts forEachParts &&
+            ForEachPartsWithIdentifier(identifier: AstNode variable):
+        // If a for-in loop, treat the for parts like an assignment, so they
+        // split like:
+        //
+        //     for (var variable in [
+        //       initializer,
+        //     ]) {
+        //       body;
+        //     }
+        // TODO(tall): Passing `canBlockSplitLeft: true` allows output like:
+        //
+        //     // 1
+        //     for (variable in longExpression +
+        //         thatWraps) {
+        //       ...
+        //     }
+        //
+        // Versus the split in the initializer forcing a split before `in` too:
+        //
+        //     // 2
+        //     for (variable
+        //         in longExpression +
+        //             thatWraps) {
+        //       ...
+        //     }
+        //
+        // This is also allowed:
+        //
+        //     // 3
+        //     for (variable
+        //         in longExpression + thatWraps) {
+        //       ...
+        //     }
+        //
+        // Currently, the formatter prefers 1 over 3. We may want to revisit
+        // that and prefer 3 instead. Or perhaps we shouldn't pass
+        // `canBlockSplitLeft: true` and force the `in` to split if the
+        // initializer does. That would be consistent with how we handle
+        // splitting before `case` when the pattern has a newline in an if-case
+        // statement or element.
+        forPartsPiece = buildPiece((b) {
+          b.token(leftParenthesis);
+          b.add(createAssignment(
+              variable, forEachParts.inKeyword, forEachParts.iterable,
+              splitBeforeOperator: true));
+          b.token(rightParenthesis);
+        });
+
+      case ForEachParts forEachParts &&
+            ForEachPartsWithPattern(:var keyword, :var metadata, :var pattern):
+        forPartsPiece = buildPiece((b) {
+          b.token(leftParenthesis);
+
+          // Use a nested piece so that the metadata precedes the keyword and
+          // not the `(`.
+          b.add(buildPiece((b) {
+            b.metadata(metadata, inline: true);
+            b.token(keyword);
+            b.space();
+
+            b.add(createAssignment(
+                pattern, forEachParts.inKeyword, forEachParts.iterable,
+                splitBeforeOperator: true));
+          }));
+          b.token(rightParenthesis);
+        });
+    }
+
+    var bodyPiece = nodePiece(body);
+
+    // If there is metadata before the for loop variable or pattern, then make
+    // sure that the entire contents of the for loop parts are indented so that
+    // the annotations are indented.
+    var indentHeader = switch (forLoopParts) {
+      ForEachPartsWithDeclaration(:var loopVariable) =>
+        loopVariable.metadata.isNotEmpty,
+      ForEachPartsWithPattern(:var metadata) => metadata.isNotEmpty,
+      _ => false,
+    };
+
+    var forPiece = ForPiece(forKeywordPiece, forPartsPiece, bodyPiece,
+        indentForParts: indentHeader, hasBlockBody: hasBlockBody);
+
+    if (forceSplitBody) forPiece.pin(State.split);
+
+    return forPiece;
+  }
+
+  /// Creates a normal (not function-typed) formal parameter with a name and/or
+  /// type annotation.
+  ///
+  /// If [mutableKeyword] is given, it should be the `var` or `final` keyword.
+  /// If [fieldKeyword] and [period] are given, the former should be the `this`
+  /// or `super` keyword for an initializing formal or super parameter.
+  Piece createFormalParameter(
+      NormalFormalParameter node, TypeAnnotation? type, Token? name,
+      {Token? mutableKeyword, Token? fieldKeyword, Token? period}) {
+    return createParameter(
+        metadata: node.metadata,
+        modifiers: [
+          node.requiredKeyword,
+          node.covariantKeyword,
+          mutableKeyword,
+        ],
+        type,
+        fieldKeyword: fieldKeyword,
+        period: period,
+        name);
+  }
+
   /// Creates a function, method, getter, or setter declaration.
   ///
   /// If [modifierKeyword] is given, it should be the `static` or `abstract`
@@ -227,18 +421,22 @@ mixin PieceFactory {
   /// [propertyKeyword] is given, it should be the `get` or `set` keyword on a
   /// getter or setter declaration.
   Piece createFunction(
-      {Token? externalKeyword,
-      Token? modifierKeyword,
-      AstNode? returnType,
+      {List<Annotation> metadata = const [],
+      List<Token?> modifiers = const [],
+      TypeAnnotation? returnType,
       Token? operatorKeyword,
       Token? propertyKeyword,
       Token? name,
       TypeParameterList? typeParameters,
       FormalParameterList? parameters,
       required FunctionBody body}) {
+    var metadataBuilder = AdjacentBuilder(this);
+    metadataBuilder.metadata(metadata);
+
     var builder = AdjacentBuilder(this);
-    builder.modifier(externalKeyword);
-    builder.modifier(modifierKeyword);
+    for (var keyword in modifiers) {
+      builder.modifier(keyword);
+    }
 
     Piece? returnTypePiece;
     if (returnType != null) {
@@ -253,26 +451,48 @@ mixin PieceFactory {
     builder.visit(parameters);
     var signature = builder.build();
 
-    var bodyPiece = nodePiece(body);
+    var bodyPiece = createFunctionBody(body);
 
-    return FunctionPiece(returnTypePiece, signature,
-        body: bodyPiece, spaceBeforeBody: body is! EmptyFunctionBody);
+    metadataBuilder.add(FunctionPiece(returnTypePiece, signature,
+        isReturnTypeFunctionType: returnType is GenericFunctionType,
+        body: bodyPiece));
+
+    return metadataBuilder.build();
+  }
+
+  /// Creates a piece for a function, method, or constructor body.
+  Piece createFunctionBody(FunctionBody body) {
+    return buildPiece((b) {
+      // Don't put a space before `;` bodies.
+      if (body is! EmptyFunctionBody) b.space();
+      b.visit(body);
+    });
   }
 
   /// Creates a function type or function-typed formal.
   ///
   /// If creating a piece for a function-typed formal, then [parameter] is the
   /// formal parameter.
+  ///
+  /// If this is a function-typed initializing formal (`this.foo()`), then
+  /// [fieldKeyword] is `this` and [period] is the `.`. Likewise, for a
+  /// function-typed super parameter, [fieldKeyword] is `super`.
   Piece createFunctionType(
       TypeAnnotation? returnType,
       Token functionKeywordOrName,
       TypeParameterList? typeParameters,
       FormalParameterList parameters,
       Token? question,
-      {FunctionTypedFormalParameter? parameter}) {
+      {FormalParameter? parameter,
+      Token? fieldKeyword,
+      Token? period}) {
     var builder = AdjacentBuilder(this);
 
-    if (parameter != null) startFormalParameter(parameter, builder);
+    if (parameter != null) {
+      builder.metadata(parameter.metadata, inline: true);
+      builder.modifier(parameter.requiredKeyword);
+      builder.modifier(parameter.covariantKeyword);
+    }
 
     Piece? returnTypePiece;
     if (returnType != null) {
@@ -280,12 +500,50 @@ mixin PieceFactory {
       returnTypePiece = builder.build();
     }
 
+    builder.token(fieldKeyword);
+    builder.token(period);
     builder.token(functionKeywordOrName);
     builder.visit(typeParameters);
     builder.visit(parameters);
     builder.token(question);
 
-    return FunctionPiece(returnTypePiece, builder.build());
+    builder.add(FunctionPiece(returnTypePiece, builder.build(),
+        isReturnTypeFunctionType: returnType is GenericFunctionType));
+
+    return builder.build();
+  }
+
+  /// Creates a piece for the header -- everything from the `if` keyword to the
+  /// closing `)` -- of an if statement, if element, if-case statement, or
+  /// if-case element.
+  Piece createIfCondition(Token ifKeyword, Token leftParenthesis,
+      Expression expression, CaseClause? caseClause, Token rightParenthesis) {
+    return buildPiece((b) {
+      b.token(ifKeyword);
+      b.space();
+      b.token(leftParenthesis);
+
+      var expressionPiece = nodePiece(expression);
+
+      if (caseClause != null) {
+        var casePiece = buildPiece((b) {
+          b.token(caseClause.caseKeyword);
+          b.space();
+          b.visit(caseClause.guardedPattern.pattern);
+        });
+
+        var guardPiece =
+            optionalNodePiece(caseClause.guardedPattern.whenClause);
+
+        b.add(IfCasePiece(expressionPiece, casePiece, guardPiece,
+            canBlockSplitPattern:
+                caseClause.guardedPattern.pattern.canBlockSplit));
+      } else {
+        b.add(expressionPiece);
+      }
+
+      b.token(rightParenthesis);
+    });
   }
 
   /// Creates a [TryPiece] for try statement.
@@ -329,14 +587,12 @@ mixin PieceFactory {
       // Edge case: When there's another catch/on/finally after this one, we
       // want to force the block to split even if it's empty.
       //
-      // ```
-      // try {
-      //   ..
-      // } on Foo {
-      // } finally Bar {
-      //   body;
-      // }
-      // ```
+      //     try {
+      //       ..
+      //     } on Foo {
+      //     } finally Bar {
+      //       body;
+      //     }
       var forceSplit = i < tryStatement.catchClauses.length - 1 ||
           tryStatement.finallyBlock != null;
       var catchClauseBody =
@@ -353,64 +609,11 @@ mixin PieceFactory {
     return piece;
   }
 
-  // TODO(tall): Generalize this to work with if elements too.
-  /// Creates a piece for a chain of if-else-if... statements.
-  Piece createIf(IfStatement ifStatement) {
-    var piece = IfPiece();
-
-    // Recurses through the else branches to flatten them into a linear if-else
-    // chain handled by a single [IfPiece].
-    void traverse(Piece? previousElse, IfStatement node) {
-      var condition = buildPiece((b) {
-        if (previousElse != null) b.add(previousElse);
-        b.add(startControlFlow(node.ifKeyword, node.leftParenthesis,
-            node.expression, node.rightParenthesis));
-      });
-
-      // Edge case: When the then branch is a block and there is an else clause
-      // after it, we want to force the block to split even if empty, like:
-      //
-      // ```
-      // if (condition) {
-      // } else {
-      //   body;
-      // }
-      // ```
-      var thenStatement = switch (node.thenStatement) {
-        Block thenBlock when node.elseStatement != null =>
-          createBlock(thenBlock, forceSplit: true),
-        _ => nodePiece(node.thenStatement)
-      };
-
-      piece.add(condition, thenStatement, isBlock: node.thenStatement is Block);
-
-      switch (node.elseStatement) {
-        case IfStatement elseIf:
-          // Hit an else-if, so flatten it into the chain with the `else`
-          // becoming part of the next section's header.
-          traverse(buildPiece((b) {
-            b.token(node.elseKeyword);
-            b.space();
-          }), elseIf);
-
-        case var elseStatement?:
-          // Any other kind of else body ends the chain, with the header for
-          // the last section just being the `else` keyword.
-          var header = tokenPiece(node.elseKeyword!);
-          var statement = nodePiece(elseStatement);
-          piece.add(header, statement, isBlock: elseStatement is Block);
-      }
-    }
-
-    traverse(null, ifStatement);
-    return piece;
-  }
-
   /// Creates an [ImportPiece] for an import or export directive.
   Piece createImport(NamespaceDirective directive, Token keyword,
       {Token? deferredKeyword, Token? asKeyword, SimpleIdentifier? prefix}) {
     var builder = AdjacentBuilder(this);
-    createDirectiveMetadata(directive);
+    builder.metadata(directive.metadata);
     builder.token(keyword);
     builder.space();
     builder.visit(directive.uri);
@@ -462,6 +665,30 @@ mixin PieceFactory {
     return builder.build();
   }
 
+  /// Creates a [Piece] for an index expression whose [target] has already been
+  /// converted to a piece.
+  ///
+  /// The [target] may be `null` if [index] is an index expression for a
+  /// cascade section.
+  Piece createIndexExpression(Piece? target, IndexExpression index) {
+    // TODO(tall): Consider whether we should allow splitting between
+    // successive index expressions, like:
+    //
+    //     jsonData['some long key']
+    //         ['another long key'];
+    //
+    // The current formatter allows it, but it's very rarely used (0.021% of
+    // index expressions in a corpus of pub packages).
+    return buildPiece((b) {
+      if (target != null) b.add(target);
+      b.token(index.question);
+      b.token(index.period);
+      b.token(index.leftBracket);
+      b.visit(index.index);
+      b.token(index.rightBracket);
+    });
+  }
+
   /// Creates a single infix operation.
   ///
   /// If [hanging] is `true` then the operator goes at the end of the first
@@ -511,7 +738,7 @@ mixin PieceFactory {
   /// same precedence.
   Piece createInfixChain<T extends AstNode>(
       T node, BinaryOperation Function(T node) destructure,
-      {int? precedence}) {
+      {int? precedence, bool indent = true}) {
     var builder = AdjacentBuilder(this);
     var operands = <Piece>[];
 
@@ -537,7 +764,7 @@ mixin PieceFactory {
     traverse(node);
     operands.add(builder.build());
 
-    return InfixPiece(operands);
+    return InfixPiece(operands, indent: indent);
   }
 
   /// Creates a [ListPiece] for the given bracket-delimited set of elements.
@@ -552,23 +779,117 @@ mixin PieceFactory {
     return builder.build();
   }
 
-  /// Creates a class, enum, extension, mixin, or mixin application class
-  /// declaration.
+  /// Create a [VariablePiece] for a named or wildcard variable pattern.
+  Piece createPatternVariable(
+      Token? keyword, TypeAnnotation? type, Token name) {
+    // If it's a wildcard with no declaration keyword or type, there is just a
+    // name token.
+    if (keyword == null && type == null) return tokenPiece(name);
+
+    var header = buildPiece((b) {
+      b.modifier(keyword);
+      b.visit(type);
+    });
+    return VariablePiece(
+      header,
+      [tokenPiece(name)],
+      hasType: type != null,
+    );
+  }
+
+  /// Creates a [Piece] for an AST node followed by an unsplittable token.
+  Piece createPostfix(AstNode node, Token? operator) {
+    return buildPiece((b) {
+      b.visit(node);
+      b.token(operator);
+    });
+  }
+
+  /// Creates a [Piece] for an AST node preceded by an unsplittable token.
+  ///
+  /// If [space] is `true` and there is an operator, writes a space between the
+  /// operator and operand.
+  Piece createPrefix(Token? operator, AstNode? node, {bool space = false}) {
+    return buildPiece((b) {
+      b.token(operator, spaceAfter: space);
+      b.visit(node);
+    });
+  }
+
+  /// Creates an [AdjacentPiece] for a given record type field.
+  Piece createRecordTypeField(RecordTypeAnnotationField node) {
+    return createParameter(metadata: node.metadata, node.type, node.name);
+  }
+
+  /// Creates a [ListPiece] for a record literal or pattern.
+  Piece createRecord(
+    Token leftParenthesis,
+    List<AstNode> fields,
+    Token rightParenthesis, {
+    Token? constKeyword,
+  }) {
+    var style = switch (fields) {
+      // Record types or patterns with a single named field don't add a trailing
+      // comma unless it's split, like:
+      //
+      //     ({int n}) x;
+      //
+      // Or:
+      //
+      //     if (obj case (name: value)) {
+      //       ;
+      //     }
+      [PatternField(name: _?)] => const ListStyle(commas: Commas.trailing),
+      [NamedExpression()] => const ListStyle(commas: Commas.trailing),
+
+      // Record types or patterns with a single positional field always have a
+      // trailing comma to disambiguate from parenthesized expressions or
+      // patterns, like:
+      //
+      //     (int,) x;
+      //
+      // Or:
+      //
+      //     if (obj case (pattern,)) {
+      //       ;
+      //     }
+      [_] => const ListStyle(commas: Commas.alwaysTrailing),
+
+      // Record types or patterns with multiple fields have regular trailing
+      // commas when split.
+      _ => const ListStyle(commas: Commas.trailing)
+    };
+    return createCollection(
+      constKeyword: constKeyword,
+      leftParenthesis,
+      fields,
+      rightParenthesis,
+      style: style,
+    );
+  }
+
+  /// Creates a class, enum, extension, extension type, mixin, or mixin
+  /// application class declaration.
+  ///
+  /// The [keywords] list is the ordered list of modifiers and keywords at the
+  /// beginning of the declaration.
   ///
   /// For all but a mixin application class, [body] should a record containing
   /// the bracket delimiters and the list of member declarations for the type's
-  /// body.
-  ///
-  /// For mixin application classes, [body] is `null` and instead [equals],
-  /// [superclass], and [semicolon] are provided.
+  /// body. For mixin application classes, [body] is `null` and instead
+  /// [equals], [superclass], and [semicolon] are provided.
   ///
   /// If the type is an extension, then [onType] is a record containing the
   /// `on` keyword and the on type.
-  Piece createType(NodeList<Annotation> metadata, List<Token?> modifiers,
-      Token keyword, Token? name,
+  ///
+  /// If the type is an extension type, then [representation] is the primary
+  /// constructor for it.
+  Piece createType(
+      NodeList<Annotation> metadata, List<Token?> keywords, Token? name,
       {TypeParameterList? typeParameters,
       Token? equals,
       NamedType? superclass,
+      RepresentationDeclaration? representation,
       ExtendsClause? extendsClause,
       OnClause? onClause,
       WithClause? withClause,
@@ -577,11 +898,17 @@ mixin PieceFactory {
       (Token, TypeAnnotation)? onType,
       ({Token leftBracket, List<AstNode> members, Token rightBracket})? body,
       Token? semicolon}) {
-    if (metadata.isNotEmpty) throw UnimplementedError('Type metadata.');
+    var metadataBuilder = AdjacentBuilder(this);
+    metadataBuilder.metadata(metadata);
 
     var header = buildPiece((b) {
-      modifiers.forEach(b.modifier);
-      b.token(keyword);
+      var space = false;
+      for (var keyword in keywords) {
+        if (space) b.space();
+        b.token(keyword);
+        if (keyword != null) space = true;
+      }
+
       b.token(name, spaceBefore: true);
 
       if (typeParameters != null) {
@@ -595,6 +922,11 @@ mixin PieceFactory {
         b.token(equals);
         b.space();
         b.visit(superclass!);
+      }
+
+      // Extension types have a representation type.
+      if (representation != null) {
+        b.visit(representation);
       }
     });
 
@@ -650,7 +982,10 @@ mixin PieceFactory {
       bodyPiece = tokenPiece(semicolon!);
     }
 
-    return TypePiece(header, clausesPiece, bodyPiece, hasBody: body != null);
+    metadataBuilder
+        .add(TypePiece(header, clausesPiece, bodyPiece, hasBody: body != null));
+
+    return metadataBuilder.build();
   }
 
   /// Creates a [ListPiece] for a type argument or type parameter list.
@@ -661,16 +996,6 @@ mixin PieceFactory {
         elements,
         rightBracket: rightBracket,
         style: const ListStyle(commas: Commas.nonTrailing, splitCost: 3));
-  }
-
-  /// Writes the parts of a formal parameter shared by all formal parameter
-  /// types: metadata, `covariant`, etc.
-  void startFormalParameter(
-      FormalParameter parameter, AdjacentBuilder builder) {
-    if (parameter.metadata.isNotEmpty) throw UnimplementedError();
-
-    builder.modifier(parameter.requiredKeyword);
-    builder.modifier(parameter.covariantKeyword);
   }
 
   /// Handles the `async`, `sync*`, or `async*` modifiers on a function body.
@@ -698,33 +1023,111 @@ mixin PieceFactory {
   /// If [splitBeforeOperator] is `true`, then puts [operator] at the beginning
   /// of the next line when it splits. Otherwise, puts the operator at the end
   /// of the preceding line.
+  ///
+  /// If [canBlockSplitLeft] is `true`, then the left-hand operand supports
+  /// being block-formatted without indenting it farther, like:
+  ///
+  ///     var [
+  ///       element,
+  ///     ] = list;
   Piece createAssignment(
-      AstNode target, Token operator, Expression rightHandSide,
+      AstNode leftHandSide, Token operator, AstNode rightHandSide,
       {bool splitBeforeOperator = false,
       bool includeComma = false,
-      bool spaceBeforeOperator = true}) {
-    if (splitBeforeOperator) {
-      var targetPiece = nodePiece(target);
+      bool spaceBeforeOperator = true,
+      bool canBlockSplitLeft = false}) {
+    // If an operand can have block formatting, then a newline in it doesn't
+    // force the operator to split, as in:
+    //
+    //    var [
+    //      element,
+    //    ] = list;
+    //
+    // Or:
+    //
+    //    var list = [
+    //      element,
+    //    ];
+    canBlockSplitLeft |= switch (leftHandSide) {
+      Expression() => leftHandSide.canBlockSplit,
+      DartPattern() => leftHandSide.canBlockSplit,
+      _ => false
+    };
 
-      var initializer = buildPiece((b) {
-        b.token(operator);
-        b.space();
-        b.visit(rightHandSide, commaAfter: includeComma);
+    var canBlockSplitRight = switch (rightHandSide) {
+      Expression() => rightHandSide.canBlockSplit,
+      DartPattern() => rightHandSide.canBlockSplit,
+      _ => false
+    };
+
+    var leftPiece = nodePiece(leftHandSide);
+
+    var operatorPiece = buildPiece((b) {
+      if (spaceBeforeOperator) b.space();
+      b.token(operator);
+      if (splitBeforeOperator) b.space();
+    });
+
+    var rightPiece = nodePiece(rightHandSide, commaAfter: includeComma);
+
+    return AssignPiece(
+        left: leftPiece,
+        operatorPiece,
+        rightPiece,
+        splitBeforeOperator: splitBeforeOperator,
+        canBlockSplitLeft: canBlockSplitLeft,
+        canBlockSplitRight: canBlockSplitRight);
+  }
+
+  /// Creates a piece for a parameter-like constructor: Either a simple formal
+  /// parameter or a record type field, which is syntactically similar to a
+  /// parameter.
+  Piece createParameter(TypeAnnotation? type, Token? name,
+      {List<Annotation> metadata = const [],
+      List<Token?> modifiers = const [],
+      Token? fieldKeyword,
+      Token? period}) {
+    var builder = AdjacentBuilder(this);
+    builder.metadata(metadata, inline: true);
+
+    Piece? typePiece;
+    if (type != null) {
+      typePiece = buildPiece((b) {
+        for (var keyword in modifiers) {
+          b.modifier(keyword);
+        }
+
+        b.visit(type);
       });
-
-      return AssignPiece(targetPiece, initializer,
-          isValueDelimited: rightHandSide.canBlockSplit);
-    } else {
-      var targetPiece = buildPiece((b) {
-        b.visit(target);
-        b.token(operator, spaceBefore: spaceBeforeOperator);
-      });
-
-      var initializer = nodePiece(rightHandSide, commaAfter: includeComma);
-
-      return AssignPiece(targetPiece, initializer,
-          isValueDelimited: rightHandSide.canBlockSplit);
     }
+
+    Piece? namePiece;
+    if (name != null) {
+      namePiece = buildPiece((b) {
+        // If there is a type annotation, the modifiers will be before the type.
+        // Otherwise, they go before the name.
+        if (type == null) {
+          for (var keyword in modifiers) {
+            b.modifier(keyword);
+          }
+        }
+
+        b.token(fieldKeyword);
+        b.token(period);
+        b.token(name);
+      });
+    }
+
+    if (typePiece != null && namePiece != null) {
+      // We have both a type and name, allow splitting between them.
+      builder.add(VariablePiece(typePiece, [namePiece], hasType: true));
+    } else if (typePiece != null) {
+      builder.add(typePiece);
+    } else if (namePiece != null) {
+      builder.add(namePiece);
+    }
+
+    return builder.build();
   }
 
   /// Invokes [buildCallback] with a new [AdjacentBuilder] and returns the

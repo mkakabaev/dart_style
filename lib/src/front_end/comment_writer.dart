@@ -113,10 +113,6 @@ class CommentWriter {
       } else if (comment.type == TokenType.SINGLE_LINE_COMMENT) {
         type = CommentType.line;
       } else if (commentLine == previousLine || commentLine == tokenLine) {
-        // TODO(tall): I'm not sure if it makes sense to distinguish block
-        // comments with newlines around them from other block comments in the
-        // new Piece representation. Consider merging CommentType.inlineBlock
-        // and CommentType.block into a single type.
         type = CommentType.inlineBlock;
       } else {
         type = CommentType.block;
@@ -193,15 +189,13 @@ class SourceComment {
 ///
 /// For example, this code:
 ///
-/// ```dart
-/// a /* c1 */
-/// /* c2 */
+///     a /* c1 */
+///     /* c2 */
 ///
-/// /* c3 */
+///     /* c3 */
 ///
 ///
-/// b
-/// ```
+///     b
 ///
 /// Produces a sequence like:
 ///

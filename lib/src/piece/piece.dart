@@ -4,6 +4,8 @@
 
 import '../back_end/code_writer.dart';
 
+typedef Constrain = void Function(Piece other, State constrainedState);
+
 /// Base class for the formatter's internal representation used for line
 /// splitting.
 ///
@@ -14,15 +16,11 @@ import '../back_end/code_writer.dart';
 abstract class Piece {
   /// The ordered list of ways this piece may split.
   ///
-  /// If the piece is aready pinned, then this is just the one pinned state.
-  /// Otherwise, it's [State.unsplit], which all pieces support, followed by
-  /// any other [additionalStates].
+  /// This is [State.unsplit], which all pieces support, followed by any other
+  /// [additionalStates].
   List<State> get states {
-    if (_pinnedState case var state?) {
-      return [state];
-    } else {
-      return [State.unsplit, ...additionalStates];
-    }
+    if (_pinnedState case var pinned?) return [pinned];
+    return [State.unsplit, ...additionalStates];
   }
 
   /// The ordered list of all possible ways this piece could split.
@@ -48,6 +46,48 @@ abstract class Piece {
   State? get pinnedState => _pinnedState;
   State? _pinnedState;
 
+  /// Whether this piece or any of its children contain an explicit mandatory
+  /// newline.
+  ///
+  /// This is lazily computed and cached for performance, so should only be
+  /// accessed after all of the piece's children are known.
+  late final bool containsNewline = _calculateContainsNewline();
+
+  bool _calculateContainsNewline() {
+    var anyHasNewline = false;
+
+    forEachChild((child) {
+      anyHasNewline |= child.containsNewline;
+    });
+
+    return anyHasNewline;
+  }
+
+  /// The total number of characters of content in this piece and all of its
+  /// children.
+  ///
+  /// This is lazily computed and cached for performance, so should only be
+  /// accessed after all of the piece's children are known.
+  late final int totalCharacters = _calculateTotalCharacters();
+
+  int _calculateTotalCharacters() {
+    var total = 0;
+
+    forEachChild((child) {
+      total += child.totalCharacters;
+    });
+
+    return total;
+  }
+
+  /// Apply any constraints that this piece places on other pieces when this
+  /// piece is bound to [state].
+  ///
+  /// A piece class can override this. For any child piece that it wants to
+  /// constrain when this piece is in [state], call [constrain] and pass in the
+  /// child piece and the state that child should be constrained to.
+  void applyConstraints(State state, Constrain constrain) {}
+
   /// Given that this piece is in [state], use [writer] to produce its formatted
   /// output.
   void format(CodeWriter writer, State state);
@@ -55,9 +95,47 @@ abstract class Piece {
   /// Invokes [callback] on each piece contained in this piece.
   void forEachChild(void Function(Piece piece) callback);
 
+  /// If the piece can determine that it will always end up in a certain state
+  /// given [pageWidth] and size metrics returned by calling [containsNewline]
+  /// and [totalCharacters] on its children, then returns that [State].
+  ///
+  /// For example, a series of infix operators wider than a page will always
+  /// split one per operator. If we can determine this eagerly just based on
+  /// the size of the children and the page width, then we can pin the Piece to
+  /// that State. That in turn heavily prunes the search space that the [Solver]
+  /// is exploring. In practice, for large expressions, many of the outermost
+  /// Pieces can be eagerly pinned to their fully split state. That avoids the
+  /// Solver wasting a lot of time trying in vain to pack those outer Pieces
+  /// into unsplit states when it's obvious just from the size of their contents
+  /// that they'll have to split.
+  ///
+  /// If it's not possible to determine whether a piece will split from its
+  /// metrics, this returns `null`.
+  ///
+  /// This is purely an optimization: Running the [Solver] without ever calling
+  /// this and pinning the resulting [State] should yield the same formatting.
+  /// It is up to the [Piece] subclasses overriding this to ensure that they
+  /// only return a non-`null` [State] if the piece really would always be
+  /// solved to the returned state given its children.
+  State? fixedStateForPageWidth(int pageWidth) => null;
+
+  /// The cost that this piece should apply to the solution when in [state].
+  ///
+  /// This is usually just the state's cost, but some pieces may want to tweak
+  /// the cost in certain circumstances.
+  // TODO(tall): Given that we have this API now, consider whether it makes
+  // sense to remove the cost field from State entirely.
+  int stateCost(State state) => state.cost;
+
   /// Forces this piece to always use [state].
   void pin(State state) {
     _pinnedState = state;
+
+    // If this piece's pinned state constrains any child pieces, pin those too,
+    // recursively.
+    applyConstraints(state, (other, constrainedState) {
+      other.pin(constrainedState);
+    });
   }
 
   /// The name of this piece as it appears in debug output.
@@ -80,13 +158,7 @@ class TextPiece extends Piece {
   /// preceding comments that are on their own line will have multiple. These
   /// are stored as separate lines instead of a single multi-line string so that
   /// each line can be indented appropriately during formatting.
-  final List<String> _lines = [];
-
-  /// True if this text piece contains or ends with a mandatory newline.
-  ///
-  /// This can be from line comments, block comments with newlines inside,
-  /// multiline strings, etc.
-  bool _containsNewline = false;
+  final List<_Line> _lines = [];
 
   /// Whitespace at the end of this [TextPiece].
   ///
@@ -98,6 +170,14 @@ class TextPiece extends Piece {
   /// empty [_lines] list on the first write.
   Whitespace _trailingWhitespace = Whitespace.newline;
 
+  /// Whether the line after the next newline written should be fixed at column
+  /// one or indented to match the surrounding code.
+  ///
+  /// This is false for most lines, but is true for multiline strings where
+  /// subsequent lines in the string don't get any additional indentation from
+  /// formatting.
+  bool _flushLeft = false;
+
   /// The offset from the beginning of [text] where the selection starts, or
   /// `null` if the selection does not start within this chunk.
   int? _selectionStart;
@@ -107,48 +187,43 @@ class TextPiece extends Piece {
   int? _selectionEnd;
 
   /// Whether the last line of this piece's text ends with [text].
-  bool endsWith(String text) => _lines.isNotEmpty && _lines.last.endsWith(text);
+  bool endsWith(String text) =>
+      _lines.isNotEmpty && _lines.last._text.endsWith(text);
 
   /// Append [text] to the end of this piece.
   ///
   /// If [text] internally contains a newline, then [containsNewline] should
   /// be `true`.
-  void append(String text, {bool containsNewline = false}) {
+  void append(String text) {
     // Write any pending whitespace into the text.
     switch (_trailingWhitespace) {
       case Whitespace.none:
         break; // Nothing to do.
       case Whitespace.space:
-        // TODO(perf): Consider a faster way of accumulating text.
-        _lines.last += ' ';
+        _lines.last.append(' ');
       case Whitespace.newline:
-        _lines.add('');
+        _lines.add(_Line(flushLeft: _flushLeft));
       case Whitespace.blankLine:
         throw UnsupportedError('No blank lines in TextPieces.');
     }
 
     _trailingWhitespace = Whitespace.none;
+    _flushLeft = false;
 
-    // TODO(perf): Consider a faster way of accumulating text.
-    _lines.last = _lines.last + text;
-
-    if (containsNewline) _containsNewline = true;
+    _lines.last.append(text);
   }
 
   void space() {
     _trailingWhitespace = _trailingWhitespace.collapse(Whitespace.space);
   }
 
-  void newline() {
+  void newline({bool flushLeft = false}) {
     _trailingWhitespace = _trailingWhitespace.collapse(Whitespace.newline);
+    _flushLeft = flushLeft;
   }
 
   @override
   void format(CodeWriter writer, State state) {
-    // Let the writer know if there are any embedded newlines even if there is
-    // only one "line" in [_lines].
-    if (_containsNewline) writer.handleNewline();
-
     if (_selectionStart case var start?) {
       writer.startSelection(start);
     }
@@ -158,8 +233,9 @@ class TextPiece extends Piece {
     }
 
     for (var i = 0; i < _lines.length; i++) {
-      if (i > 0) writer.newline();
-      writer.write(_lines[i]);
+      var line = _lines[i];
+      if (i > 0) writer.newline(flushLeft: line._isFlushLeft);
+      writer.write(line._text);
     }
 
     writer.whitespace(_trailingWhitespace);
@@ -183,7 +259,7 @@ class TextPiece extends Piece {
   /// Adjust [offset] by the current length of this [TextPiece].
   int _adjustSelection(int offset) {
     for (var line in _lines) {
-      offset += line.length;
+      offset += line._text.length;
     }
 
     if (_trailingWhitespace == Whitespace.space) offset++;
@@ -192,7 +268,41 @@ class TextPiece extends Piece {
   }
 
   @override
-  String toString() => '`${_lines.join('¬')}`${_containsNewline ? '!' : ''}';
+  bool _calculateContainsNewline() =>
+      _lines.length > 1 || _trailingWhitespace.hasNewline;
+
+  @override
+  int _calculateTotalCharacters() {
+    var total = 0;
+
+    for (var line in _lines) {
+      total += line._text.length;
+    }
+
+    return total;
+  }
+
+  @override
+  String toString() => '`${_lines.join('¬')}`';
+}
+
+/// A single line of text within a [TextPiece].
+class _Line {
+  String _text = '';
+
+  /// Whether this line should start at column one or use the surrounding
+  /// indentation.
+  final bool _isFlushLeft;
+
+  _Line({required bool flushLeft}) : _isFlushLeft = flushLeft;
+
+  void append(String text) {
+    // TODO(perf): Consider a faster way of accumulating text.
+    _text += text;
+  }
+
+  @override
+  String toString() => _text;
 }
 
 /// A piece that writes a single space.
@@ -204,6 +314,12 @@ class SpacePiece extends Piece {
   void format(CodeWriter writer, State state) {
     writer.space();
   }
+
+  @override
+  bool _calculateContainsNewline() => false;
+
+  @override
+  int _calculateTotalCharacters() => 1;
 }
 
 /// A state that a piece can be in.

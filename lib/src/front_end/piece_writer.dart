@@ -3,6 +3,7 @@
 // BSD-style license that can be found in the LICENSE file.
 import 'package:analyzer/dart/ast/token.dart';
 
+import '../back_end/solution_cache.dart';
 import '../back_end/solver.dart';
 import '../dart_formatter.dart';
 import '../debug.dart' as debug;
@@ -10,6 +11,9 @@ import '../piece/adjacent.dart';
 import '../piece/piece.dart';
 import '../source_code.dart';
 import 'comment_writer.dart';
+
+/// RegExp that matches any valid Dart line terminator.
+final _lineTerminatorPattern = RegExp(r'\r\n?|\n');
 
 /// Builds [TextPiece]s for [Token]s and comments.
 ///
@@ -69,6 +73,22 @@ class PieceWriter {
     return tokenPiece;
   }
 
+  /// Creates a piece for a simple or interpolated string [literal].
+  ///
+  /// Handles splitting it into multiple lines in the resulting [TextPiece] if
+  /// [isMultiline] is `true`.
+  Piece stringLiteralPiece(Token literal, {required bool isMultiline}) {
+    if (!isMultiline) return tokenPiece(literal);
+
+    if (!_writeCommentsBefore(literal)) {
+      // We want this token to be in its own TextPiece, so if the comments
+      // didn't already lead to ending the previous TextPiece than do so now.
+      _currentText = TextPiece();
+    }
+
+    return _writeMultiLine(literal.lexeme, offset: literal.offset);
+  }
+
   // TODO(tall): Much of the comment handling code in CommentWriter got moved
   // into here, so there isn't great separation of concerns anymore. Can we
   // organize this code better? Or just combine CommentWriter with this class
@@ -95,9 +115,7 @@ class PieceWriter {
   Piece writeComment(SourceComment comment) {
     _currentText = TextPiece();
 
-    _write(comment.text,
-        offset: comment.offset, containsNewline: comment.text.contains('\n'));
-    return _currentText;
+    return _writeMultiLine(comment.text, offset: comment.offset);
   }
 
   /// Writes all of the comments that appear between [token] and the previous
@@ -127,13 +145,11 @@ class PieceWriter {
         // non-hanging ones. Otherwise, we would end up dropping comment pieces
         // on the floor. So given:
         //
-        // ```
-        // before + // one
-        //    // two
-        //    // three
-        //    // four
-        //    after;
-        // ```
+        //     before + // one
+        //        // two
+        //        // three
+        //        // four
+        //        after;
         //
         // The pieces are:
         //
@@ -148,8 +164,7 @@ class PieceWriter {
         _currentText.newline();
       }
 
-      _write(comment.text,
-          offset: comment.offset, containsNewline: comment.text.contains('\n'));
+      _write(comment.text, offset: comment.offset);
     }
 
     // Output a trailing newline after the last comment if it needs one.
@@ -182,14 +197,34 @@ class PieceWriter {
       _currentText = TextPiece();
     }
 
-    _write(lexeme ?? token.lexeme, offset: token.offset);
+    lexeme ??= token.lexeme;
+
+    _write(lexeme, offset: token.offset);
+  }
+
+  /// Writes multi-line [text] to the current [TextPiece].
+  ///
+  /// Handles breaking [text] into lines and adding them to the [TextPiece].
+  ///
+  /// The [offset] parameter is the offset in the original source code of the
+  /// beginning of multi-line lexeme.
+  Piece _writeMultiLine(String text, {required int offset}) {
+    var lines = text.split(_lineTerminatorPattern);
+    var currentOffset = offset;
+    for (var i = 0; i < lines.length; i++) {
+      if (i > 0) _currentText.newline(flushLeft: true);
+      _write(lines[i], offset: currentOffset);
+      currentOffset += lines[i].length;
+    }
+
+    return _currentText;
   }
 
   /// Writes [text] to the current [TextPiece].
   ///
   /// If [offset] is given and it contains any selection markers, then attaches
   /// those markers to the [TextPiece].
-  void _write(String text, {bool containsNewline = false, int? offset}) {
+  void _write(String text, {int? offset}) {
     if (offset != null) {
       // If this text contains any of the selection endpoints, note their
       // relative locations in the text piece.
@@ -202,18 +237,32 @@ class PieceWriter {
       }
     }
 
-    _currentText.append(text, containsNewline: containsNewline);
+    _currentText.append(text);
   }
 
   /// Finishes writing and returns a [SourceCode] containing the final output
   /// and updated selection, if any.
   SourceCode finish(Piece rootPiece) {
-    var formatter = Solver(_formatter.pageWidth);
-
     if (debug.tracePieceBuilder) {
-      print(debug.pieceTree(rootPiece));
+      debug.log(debug.pieceTree(rootPiece));
     }
 
+    // See if it's possible to eagerly pin any of the pieces based just on the
+    // length and newlines in their children. This is faster, especially for
+    // larger outermost pieces, then relying on the solver to determine their
+    // state.
+    void traverse(Piece piece) {
+      piece.forEachChild(traverse);
+
+      if (piece.fixedStateForPageWidth(_formatter.pageWidth) case var state?) {
+        piece.pin(state);
+      }
+    }
+
+    traverse(rootPiece);
+
+    var cache = SolutionCache();
+    var formatter = Solver(cache, pageWidth: _formatter.pageWidth);
     var result = formatter.format(rootPiece);
     var outputCode = result.text;
 
@@ -321,15 +370,11 @@ class PieceWriter {
   /// Removes any trailing whitespace from the selection. For example, if the
   /// original selection markers are:
   ///
-  /// ```
-  /// function(lotsOfSpac‹eAfter,     ›     andBefore);
-  /// ```
+  ///     function(lotsOfSpac‹eAfter,     ›     andBefore);
   ///
   /// Then this function moves the end marker to:
   ///
-  /// ```
-  /// function(lotsOfSpac‹eAfter,›          andBefore);
-  /// ```
+  ///     function(lotsOfSpac‹eAfter,›          andBefore);
   ///
   /// We do this because the formatter itself rewrites whitespace so it's not
   /// useful or even meaningful to try to preserve a selection's location within

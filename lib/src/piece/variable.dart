@@ -14,26 +14,20 @@ import 'piece.dart';
 /// Untyped variables never split after the keyword but do indent subsequent
 /// variables:
 ///
-/// ```
-/// var longVariableName = initializer,
-///     anotherVariable = anotherInitializer;
-/// ```
+///     var longVariableName = initializer,
+///         anotherVariable = anotherInitializer;
 ///
 /// Typed variables can split that way too:
 ///
-/// ```
-/// String longVariableName = initializer,
-///     anotherVariable = anotherInitializer;
-/// ```
+///     String longVariableName = initializer,
+///         anotherVariable = anotherInitializer;
 ///
 /// But they can also split after the type annotation. When that happens, the
 /// variables aren't indented:
 ///
-/// ```
-/// VeryLongTypeName
-/// longVariableName = initializer,
-/// anotherVariable = anotherInitializer;
-/// ```
+///     VeryLongTypeName
+///     longVariableName = initializer,
+///     anotherVariable = anotherInitializer;
 class VariablePiece extends Piece {
   /// Split between each variable in a multiple variable declaration.
   static const State _betweenVariables = State(1);
@@ -70,12 +64,10 @@ class VariablePiece extends Piece {
 
     // If we split at the variables (but not the type), then indent the
     // variables and their initializers.
-    if (state == _betweenVariables) writer.setIndent(Indent.expression);
+    if (state == _betweenVariables) writer.pushIndent(Indent.expression);
 
-    // Force variables to split if an initializer does.
-    if (_variables.length > 1 && state == State.unsplit) {
-      writer.setAllowNewlines(false);
-    }
+    // Force multiple variables to split if an initializer does.
+    writer.pushAllowNewlines(_variables.length == 1 || state != State.unsplit);
 
     // Split after the type annotation.
     writer.splitIf(state == _afterType);
@@ -84,8 +76,13 @@ class VariablePiece extends Piece {
       // Split between variables.
       if (i > 0) writer.splitIf(state != State.unsplit);
 
+      // TODO(perf): Investigate whether it's worth using `separate:` here.
       writer.format(_variables[i]);
     }
+
+    if (state == _betweenVariables) writer.popIndent();
+
+    writer.popAllowNewlines();
   }
 
   @override

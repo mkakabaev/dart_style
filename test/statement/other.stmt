@@ -31,27 +31,14 @@ while (true) {
 while (true) {
   continue someLabel;
 }
->>> Yield.
-Stream<String> i(String n) async* {
-  yield   i   ;
-}
+>>> Rethrow.
+try {
+  throw 1   ;
+} catch    (e) {
+       rethrow    ;}
 <<<
-Stream<String> i(String n) async* {
-  yield i;
-}
->>> Yield*.
-Stream<int> i(int n) async* {
-  yield * i (  n   - 1 )      ;
-}
-<<<
-Stream<int> i(int n) async* {
-  yield* i(n - 1);
-}
->>> Await.
-foo() async {
-  await i (  1 + 2   )   ;
-}
-<<<
-foo() async {
-  await i(1 + 2);
+try {
+  throw 1;
+} catch (e) {
+  rethrow;
 }
